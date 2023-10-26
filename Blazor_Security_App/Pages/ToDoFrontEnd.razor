@@ -1,0 +1,150 @@
+﻿@page "/todo"
+@using Blazor_Security_App.Data
+@using Blazor_Security_App.Interfaces
+@using System.Linq
+@using System.Security.Claims
+@using System.Security.Cryptography;
+@using System.Text;
+@inject IRepository<ToDo> ToDoRepository
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@attribute [Authorize]
+
+
+<h3>ToDo</h3>
+
+<div class="form-group">
+    <label for="name">Name:</label>
+    <input type="text" class="form-control" id="name" @bind="TodoItem.Name" />
+</div>
+
+<div class="form-group">
+    <label for="description">Description:</label>
+    <input type="text" class="form-control" id="description" @bind="TodoItem.Description" />
+</div>
+
+<button @onclick="AddOrUpdateItemAsync" class="btn btn-primary">Save</button>
+<button @onclick="CancelEdit" class="btn btn-secondary">Cancel</button>
+
+
+
+<h4>List of ToDo Items:</h4>
+<ul>
+    @if (ToDoItems == null)
+    {
+        <li>Loading...</li>
+    }
+    else
+    {
+        foreach (var item in ToDoItems)
+        {
+            <li>
+                @item.Name - @item.Description
+                <button @onclick="(() => StartEdit(item))" class="btn btn-sm btn-warning">Edit</button>
+                <button @onclick="(() => DeleteItemAsync(item.Id))" class="btn btn-sm btn-danger">Delete</button>
+            </li>
+
+        }
+    }
+</ul>
+
+@code {
+    private ToDo TodoItem = new ToDo();
+    private List<ToDo> ToDoItems;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadToDoItems();
+    }
+
+    //Før man gemmer, generer hash for den redigerede entity og sammenligner med den originale.
+    private async Task AddOrUpdateItemAsync()
+    {
+        var userId = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var currentHash = GenerateHash(TodoItem);
+
+        if (TodoItem.Id > 0)
+        {
+            if (originalHash != currentHash)
+            {
+                var editedItem = await ToDoRepository.UpdateAsync(TodoItem);
+                Console.WriteLine("Edited");
+            }
+            else
+            {
+                Console.WriteLine("No changes detected, update skipped.");
+            }
+        }
+        else
+        {
+            var addedItem = await ToDoRepository.AddAsync(TodoItem, userId);
+            Console.WriteLine($"Added: {addedItem.Name} - {addedItem.Description}");
+        }
+
+        TodoItem = new ToDo(); // Resetter bound item
+        await LoadToDoItems();
+    }
+
+    private void CancelEdit()
+    {
+        TodoItem = new ToDo(); // Resetter bound item
+    }
+
+    private async Task LoadToDoItems()
+    {
+        var userId = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User.FindFirstValue(ClaimTypes.NameIdentifier);
+        ToDoItems = (await ToDoRepository.GetAllAsync(userId)).ToList();
+    }
+
+        
+
+
+    private void EditItem()
+    {
+        Console.WriteLine($"Edited: {TodoItem.Name} - {TodoItem.Description}");
+    }
+    private string originalHash;
+
+    //Gem den originale item
+
+    private void StartEdit(ToDo item)
+    {
+        TodoItem = item;
+        originalHash = GenerateHash(item);
+    }
+
+    // Generer en hash for To Do entitetens properties og giver den en serie af bytes (32). En slags digital fingerprint. Enhver ændring vil give en anden hash.
+    public string GenerateHash(ToDo item)
+    {
+    var data = $"{item.Name}{item.Description}{item.UserId}{item.Id}"; 
+    using var sha256 = SHA256.Create();
+    byte[] hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(data));
+    return Convert.ToBase64String(hashBytes);
+    }
+
+
+    private async Task DeleteItemAsync(int id)
+    {
+        var success = await ToDoRepository.DeleteAsync(id);
+        if (success)
+        {
+            Console.WriteLine($"Deleted item with ID: {id}");
+            await LoadToDoItems();
+        }
+        else
+        {
+            Console.WriteLine($"Failed to delete item with ID: {id}");
+        }
+    }
+
+    private async Task EditItemAsync()
+    {
+        if (TodoItem.Id > 0) // Checking if it's an existing item
+        {
+            var editedItem = await ToDoRepository.UpdateAsync(TodoItem);
+            Console.WriteLine($"Edited: {editedItem.Name} - {editedItem.Description}");
+            TodoItem = new ToDo(); // Reset the bound item
+            await LoadToDoItems();
+        }
+    }
+
+}
