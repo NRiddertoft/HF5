@@ -21,7 +21,7 @@
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
-      "applicationUrl": "https://tec-h5.dk:9088;https://tec-h5.dk",
+      "applicationUrl": "https://tec-h5.dk:9052;https://tec-h5.dk",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
